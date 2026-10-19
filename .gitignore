@@ -1,0 +1,53 @@
+# ============================================================
+# dump工具 - GitHub 仓库 .gitignore
+# 说明：二进制 / 构建产物 / 日志 / 运行时配置 / 含敏感信息的开发文件
+#       均不进版本库。详见 README.md "获取与构建" 一节。
+# ============================================================
+
+# ===== 二进制 / 大文件（不放仓库，见 README 下载说明）=====
+# frida-server 二进制请从 frida 官方 release 下载
+frida-server-*
+*.hidden
+*.hidden.hidden
+
+# 编译产物（exe 通过 GitHub Releases 发布，不进源码树）
+*.exe
+
+# dump 缓存
+*.dcache
+
+# ===== 构建产物 =====
+build/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== 运行时日志 =====
+_*.log
+_debug.log
+_bridge_debug.log
+_build_gui.log
+_build_mcp.log
+
+# ===== 运行时配置 / 数据（可能含设备 IP / hook 目标，敏感）=====
+# 真实配置不入库，请参考 adb_config.example.json 自行填写
+_adb_config.json
+recent.json
+_stars.json
+
+# ===== 运行痕迹脚本（含具体 hook 调试信息，敏感）=====
+_hook_debug.js
+_pid_attach_test.js
+
+# ===== 开发自测脚本（含本地路径 / 具体游戏包名，不进仓库）=====
+_test_*.py
+
+# ===== IDE / 系统杂项 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini

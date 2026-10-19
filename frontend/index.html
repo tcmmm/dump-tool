@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dump 翻译工作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== 顶部栏 ===== -->
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">🎮</div>
+    <div class="brand-text">
+      <span class="brand-title">dump 翻译工作台</span>
+      <span class="brand-sub">Il2CppDumper 逆向分析助手</span>
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <button id="btnOpen" class="btn btn-primary" title="选择并加载一个 dump.cs 文件">
+      <span>📂</span> 打开文件
+    </button>
+    <button id="btnDiff" class="btn btn-ghost" disabled title="加载新版 dump.cs 与当前版本对比: 新增/删除/RVA 变化">
+      <span>🔀</span> 版本对比
+    </button>
+    <button id="btnMigrate" class="btn btn-ghost" disabled title="游戏更新后: 粘贴老 hook 代码, RVA 一键重写成新版地址 (需先版本对比加载新版)">
+      <span>🛫</span> Hook 迁移
+    </button>
+    <button id="btnStrings" class="btn btn-ghost" disabled title="搜游戏全部字符串字面量 (需 dump.cs 同目录有 stringliteral.json)">
+      <span>🔤</span> 字符串
+    </button>
+    <button id="btnAdb" class="btn btn-ghost" title="连接手机 (USB/WiFi): 管理应用 / 提取 il2cpp 材料 / 推送脚本 / Frida 调试 / 日志终端">
+      <span>📱</span> ADB
+    </button>
+    <button id="btnExport" class="btn btn-ghost" disabled title="导出带中文注释的 dump.cs">
+      <span>⬇</span> 导出翻译
+    </button>
+  </div>
+
+  <div class="search-box">
+    <span class="search-icon">🔍</span>
+    <input id="searchInput" placeholder="搜索类名 / 方法名 / 中文 / 0x地址…" autocomplete="off" />
+    <kbd class="search-kbd">Ctrl K</kbd>
+  </div>
+</header>
+
+<!-- ===== 主区 ===== -->
+<div class="main">
+  <!-- 左: 结构树 + 收藏 -->
+  <aside class="panel sidebar">
+    <div class="panel-header">
+      <span>📁 结构树</span>
+      <button id="btnCollapseAll" class="mini-btn" title="全部折叠">⊟</button>
+    </div>
+    <div id="tree" class="tree"></div>
+    <div class="panel-header stars-header">
+      <span>⭐ 收藏</span>
+      <span class="stars-actions">
+        <button id="btnTraceStars" class="mini-btn" title="生成所有收藏项的 Frida 批量追踪脚本 (游戏做操作看谁被调)">⚡</button>
+        <button id="btnProjStars" class="mini-btn" title="把所有收藏项导出成完整 NDK Hook 工程 zip (入口+offsets+编译脚本)">🚀</button>
+        <button id="btnExportIdaStars" class="mini-btn" title="把所有收藏项导出成 IDA 命名脚本(重命名+中文注释)">🧭 IDA</button>
+      </span>
+    </div>
+    <div id="starsPanel" class="stars-panel">
+      <div class="stars-empty">点击类/方法旁的 ☆ 收藏<br>版本对比时会优先标注收藏项变化</div>
+    </div>
+  </aside>
+
+  <!-- 中: 类列表 -->
+  <section class="panel classlist">
+    <div class="panel-header">
+      <span id="classlistTitle">类列表</span>
+      <span id="classlistCount" class="count-badge">0</span>
+    </div>
+    <div class="classlist-filter">
+      <input id="classFilter" placeholder="筛选当前分类…" autocomplete="off" />
+    </div>
+    <div id="classlist" class="classlist-body">
+      <div class="placeholder">👈 点击左侧树中的分类查看类</div>
+    </div>
+    <div class="classlist-footer hidden" id="classlistFooter">
+      <button id="btnLoadMore" class="btn btn-ghost btn-sm">加载更多</button>
+    </div>
+  </section>
+
+  <!-- 右: 详情 -->
+  <section class="panel detail">
+    <div class="panel-header"><span>📄 详情</span></div>
+    <div id="detail" class="detail-body">
+      <div class="detail-placeholder">
+        <div class="dp-icon">🧭</div>
+        <p>选中一个类，这里会显示它的</p>
+        <p>中文释义 · 用途 · 字段 · 方法 · RVA</p>
+        <p class="dp-sub">还可以一键生成 Dobby Hook 代码</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ===== 状态栏 ===== -->
+<footer class="statusbar">
+  <span id="statusFile">未加载文件</span>
+  <span class="status-sep">|</span>
+  <span id="statusStats">—</span>
+  <span class="status-spacer"></span>
+  <span id="statusRight"></span>
+</footer>
+
+<!-- ===== 欢迎屏 (空状态) ===== -->
+<div id="welcome" class="welcome">
+  <div class="welcome-card">
+    <div class="welcome-logo">🎮</div>
+    <h1>dump 翻译工作台</h1>
+    <p class="welcome-sub">加载 Il2CppDumper 生成的 <code>dump.cs</code>，自动翻译、分类、搜索</p>
+
+    <button id="btnOpenBig" class="btn btn-primary btn-lg"><span>📂</span> 打开 dump.cs 文件</button>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="dz-icon">⬇</div>
+      <p>或将文件拖拽到此处</p>
+      <p class="dz-sub">支持 .cs 文件（55MB 大文件约 10 秒解析）</p>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="f-icon">🔤</div>
+        <div class="f-title">中文翻译</div>
+        <div class="f-desc">类/方法/字段逐词翻译 + Unity 大白话</div>
+      </div>
+      <div class="feature">
+        <div class="f-icon">🗂️</div>
+        <div class="f-title">用途分类</div>
+        <div class="f-desc">界面/战斗/移动等 19 类自动归类</div>
+      </div>
+      <div class="feature">
+        <div class="f-icon">🔍</div>
+        <div class="f-title">全局搜索</div>
+        <div class="f-desc">类名 / 中文 / 分类名秒搜</div>
+      </div>
+      <div class="feature">
+        <div class="f-icon">🪝</div>
+        <div class="f-title">Hook 生成</div>
+        <div class="f-desc">一键生成 Dobby C++ 代码</div>
+      </div>
+    </div>
+
+    <div id="recentList" class="recent hidden">
+      <div class="recent-title">最近打开</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 加载遮罩 ===== -->
+<div id="loading" class="loading hidden">
+  <div class="spinner"></div>
+  <div id="loadingText">正在解析 dump.cs…</div>
+  <div id="loadingSub" class="loading-sub"></div>
+</div>
+
+<!-- ===== Hook 代码弹窗 ===== -->
+<div id="hookModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <div class="modal-head">
+      <span id="hookTitle">Dobby Hook 代码</span>
+      <button class="modal-close" id="hookClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="hook-meta" id="hookMeta"></div>
+      <div class="hook-tabs">
+        <button id="hookTabMini" class="hook-tab active">精简模板</button>
+        <button id="hookTabFull" class="hook-tab">🚀 完整示例（含基址+安装+编译命令）</button>
+        <button id="hookTabFrida" class="hook-tab">⚡ Frida JS（免编译调试）</button>
+        <button id="hookTabByName" class="hook-tab" title="运行时用 il2cpp 导出函数按名字查函数地址 — 游戏更新后免改码">🔄 按名解析（更新免改码）</button>
+      </div>
+      <pre class="code-block"><code id="hookCode"></code></pre>
+      <div class="modal-actions">
+        <button id="btnDebugHook" class="btn btn-primary" title="免导出免命令行: 自动用 Frida 版脚本推送到手机运行, 日志直接显示在下方">📱 ADB 调试运行</button>
+        <button id="btnCopyHook" class="btn btn-ghost">📋 复制代码</button>
+        <button id="btnCloseHook" class="btn btn-ghost">关闭</button>
+      </div>
+      <div id="hookRunPanel" class="hidden" style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:12px">📱 手机运行日志 <span id="hookRunState" style="font-size:11px;color:var(--text-faint)"></span></span>
+          <span>
+            <button id="btnHookStopRun" class="btn btn-ghost btn-sm">⏹ 停止脚本</button>
+            <button id="btnHookClearLog" class="btn btn-ghost btn-sm">🧹 清空</button>
+          </span>
+        </div>
+        <div id="hookRunLog" class="adb-console" style="max-height:230px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== GG Lua 脚本弹窗 ===== -->
+<div id="ggModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <div class="modal-head">
+      <span id="ggTitle">🎮 GG Lua 脚本</span>
+      <button class="modal-close" id="ggClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="hook-meta" id="ggMeta"></div>
+      <pre class="code-block"><code id="ggCode"></code></pre>
+      <div class="modal-actions">
+        <button id="btnExportGg" class="btn btn-primary">📄 导出 .lua 文件</button>
+        <button id="btnPushGg" class="btn btn-ghost" title="通过 ADB 推送到手机 /sdcard/Download/ (GG 文件选择器可直接选)">📱 推送到手机</button>
+        <button id="btnExportProbe" class="btn btn-ghost" title="通用 il2cpp 探测器: 任意地址→类名, 不绑定单个类, 内嵌收藏名单">🔍 导出探测器</button>
+        <button id="btnCopyGg" class="btn btn-ghost">📋 复制代码</button>
+        <button id="btnCloseGg" class="btn btn-ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 版本对比弹窗 ===== -->
+<div id="diffModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card modal-wide">
+    <div class="modal-head">
+      <span id="diffTitle">🔀 版本对比</span>
+      <button class="modal-close" id="diffClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="diffMeta" class="hook-meta"></div>
+      <div id="diffStats" class="diff-stats"></div>
+      <div id="diffContent" class="diff-content"></div>
+      <div class="modal-actions">
+        <button id="btnExportDiff" class="btn btn-primary">📄 导出完整报告</button>
+        <button id="btnMigrateFromDiff" class="btn btn-ghost" title="打开 Hook 迁移: 老代码 RVA 一键重写成新版">🛫 Hook 迁移</button>
+        <button id="btnCloseDiff" class="btn btn-ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 🔤 字符串搜索弹窗 ===== -->
+<div id="stringsModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card modal-wide">
+    <div class="modal-head">
+      <span id="stringsTitle">🔤 字符串搜索</span>
+      <button class="modal-close" id="stringsClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="hook-meta" id="stringsMeta"></div>
+      <div class="strings-searchrow">
+        <input id="stringsInput" placeholder="搜游戏文本: 复活 / 钻石 / 体力 / 关卡…" autocomplete="off" />
+      </div>
+      <div id="stringsResults" class="strings-results">
+        <div class="placeholder">输入关键词, 搜游戏内全部字符串字面量</div>
+      </div>
+      <div class="modal-actions">
+        <button id="btnCloseStrings" class="btn btn-ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ⚡ Frida 批量追踪弹窗 ===== -->
+<div id="traceModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card modal-wide">
+    <div class="modal-head">
+      <span id="traceTitle">⚡ Frida 批量追踪</span>
+      <button class="modal-close" id="traceClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="hook-meta" id="traceMeta"></div>
+      <pre class="code-block"><code id="traceCode"></code></pre>
+      <div class="modal-actions">
+        <button id="btnExportTrace" class="btn btn-primary">📄 导出 trace.js</button>
+        <button id="btnPushTrace" class="btn btn-ghost" title="导出并通过 ADB 推送到手机, 配合 Frida 页直接运行">📱 导出并推送</button>
+        <button id="btnCopyTrace" class="btn btn-ghost">📋 复制代码</button>
+        <button id="btnCloseTrace" class="btn btn-ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 🛫 Hook 迁移弹窗 ===== -->
+<div id="migrateModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card modal-wide">
+    <div class="modal-head">
+      <span id="migrateTitle">🛫 Hook 迁移（RVA 一键重写）</span>
+      <button class="modal-close" id="migrateClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="hook-meta" id="migrateMeta"></div>
+      <textarea id="migrateInput" class="migrate-input" placeholder="把老版本 hook 代码全文粘贴到这里…&#10;&#10;只有能对应到旧 dump 方法表的 0x 常量会被重写, 其余常量(掩码/标志位)原样保留。&#10;前置: 已加载旧版 dump + 「版本对比」已加载新版 dump。"></textarea>
+      <div class="modal-actions">
+        <button id="btnDoMigrate" class="btn btn-primary">🛫 开始迁移</button>
+        <button id="btnCopyMigrated" class="btn btn-ghost hidden">📋 复制迁移后代码</button>
+        <button id="btnCloseMigrate" class="btn btn-ghost">关闭</button>
+      </div>
+      <div id="migrateStats" class="diff-stats"></div>
+      <div id="migrateDetail" class="diff-content"></div>
+      <pre id="migrateResultWrap" class="code-block hidden"><code id="migrateResult"></code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 📱 ADB 调试弹窗 ===== -->
+<div id="adbModal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card modal-wide adb-card">
+    <div class="modal-head">
+      <span id="adbTitle">📱 ADB 手机调试</span>
+      <button class="modal-close" id="adbClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="adbStatusBar" class="adb-statusbar">正在检测 adb 环境…</div>
+
+      <div class="adb-tabs">
+        <button id="adbTabDev" class="adb-tab active">📱 设备</button>
+        <button id="adbTabApps" class="adb-tab">🎮 应用与材料</button>
+        <button id="adbTabFrida" class="adb-tab">⚡ Frida</button>
+        <button id="adbTabTerm" class="adb-tab">🖥 日志与终端</button>
+      </div>
+
+      <!-- Tab 1: 设备 -->
+      <div id="adbPaneDev" class="adb-pane">
+        <div class="adb-row">
+          <input id="adbWifiInput" class="adb-input" placeholder="WiFi 连接: 输入手机 IP (如 192.168.1.5), 端口默认 5555" />
+          <button id="btnAdbConnect" class="btn btn-primary btn-sm">🔗 连接</button>
+          <button id="btnAdbRefresh" class="btn btn-ghost btn-sm">🔄 刷新</button>
+          <button id="btnAdbSetPath" class="btn btn-ghost btn-sm" title="找不到 adb.exe 时手动指定路径">📁 指定 adb.exe</button>
+        </div>
+        <div id="adbDeviceList" class="adb-device-list"></div>
+      </div>
+
+      <!-- Tab 2: 应用 -->
+      <div id="adbPaneApps" class="adb-pane hidden">
+        <div class="adb-row">
+          <input id="adbAppSearch" class="adb-input" placeholder="过滤包名…" />
+          <button id="btnAdbScanUnity" class="btn btn-primary btn-sm" title="扫描手机上所有第三方应用, 找出 Unity/il2cpp 游戏 (170 个约 2 分钟)">🔍 扫描 Unity 游戏</button>
+          <button id="btnAdbAppsRefresh" class="btn btn-ghost btn-sm">🔄 刷新列表</button>
+        </div>
+        <div id="adbTaskBar" class="adb-taskbar hidden"></div>
+        <div id="adbAppList" class="adb-app-list"></div>
+      </div>
+
+      <!-- Tab 3: Frida -->
+      <div id="adbPaneFrida" class="adb-pane hidden">
+        <div id="adbFridaStatus" class="adb-frida-status"></div>
+        <div class="adb-row" style="margin-top:10px">
+          <button id="btnFridaStart" class="btn btn-primary btn-sm">🚀 推送并启动 server</button>
+          <button id="btnFridaStartHidden" class="btn btn-primary btn-sm" title="反检测: 特征串随机化 + 随机文件名 + 随机端口只听 127.0.0.1 (ps扫不到frida/扫不到27042) — 带反作弊的游戏用这个">🥷 隐身启动</button>
+          <button id="btnFridaStop" class="btn btn-ghost btn-sm">⏹ 停止 server</button>
+          <button id="btnFridaPs" class="btn btn-ghost btn-sm">📋 frida-ps</button>
+        </div>
+        <div class="adb-subsec">▶ 运行脚本</div>
+        <div class="adb-row">
+          <input id="fridaPkgInput" class="adb-input" placeholder="游戏包名 (spawn 模式冷启动)" />
+          <input id="fridaScriptInput" class="adb-input" placeholder="脚本路径 (.js) — 可用「选择文件」" />
+          <button id="btnFridaPickScript" class="btn btn-ghost btn-sm">📁 选择</button>
+        </div>
+        <div class="adb-row">
+          <label class="adb-check"><input type="checkbox" id="fridaSpawnChk" checked /> spawn 冷启动 (unchecked=attach 已运行进程)</label>
+          <button id="btnFridaInject" class="btn btn-primary btn-sm" title="只填包名即可: 自动注入 Hook 弹窗选的类脚本 (attach/spawn 自动判断, 旧脚本自动替换)">⚡ 注入</button>
+          <button id="btnFridaRun" class="btn btn-ghost btn-sm" title="运行下面填的 .js 脚本文件">▶ 运行脚本文件</button>
+          <button id="btnFridaStopRun" class="btn btn-ghost btn-sm">⏹ 停止</button>
+        </div>
+        <div id="fridaInjectInfo" style="font-size:11px;color:var(--text-faint);margin:3px 0 2px"></div>
+        <div id="fridaConsole" class="adb-console"><div class="placeholder">脚本输出将显示在这里 (运行后自动轮询)…</div></div>
+      </div>
+
+      <!-- Tab 4: 日志与终端 -->
+      <div id="adbPaneTerm" class="adb-pane hidden">
+        <div class="adb-subsec">📋 logcat 快照</div>
+        <div class="adb-row">
+          <input id="logcatKeyword" class="adb-input" placeholder="过滤关键字 (可空), 如: Unity / crash / 包名" />
+          <input id="logcatLines" class="adb-input" style="max-width:90px" value="300" />
+          <button id="btnLogcat" class="btn btn-primary btn-sm">抓取</button>
+          <button id="btnAdbShot" class="btn btn-ghost btn-sm">📸 截屏</button>
+        </div>
+        <div class="adb-subsec" style="margin-top:12px">⌨️ Shell 终端</div>
+        <div class="adb-row">
+          <input id="shellInput" class="adb-input" placeholder="手机 shell 命令, 如: ps -A | grep xxx" />
+          <label class="adb-check"><input type="checkbox" id="shellRootChk" /> root (su)</label>
+          <button id="btnShellRun" class="btn btn-primary btn-sm">执行</button>
+        </div>
+        <div id="termConsole" class="adb-console"><div class="placeholder">logcat / shell 输出…</div></div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btnCloseAdb" class="btn btn-ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Toast ===== -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

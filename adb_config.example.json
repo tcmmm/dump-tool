@@ -1,0 +1,20 @@
+{
+  "_comment": "示例配置 - 复制本文件为 _adb_config.json 后填入你自己的设备信息。真实配置不入库（.gitignore 已排除）。",
+  "_fields": {
+    "serial": "ADB 设备序列号，WiFi 连接填 IP:port，USB 填设备 serial 或留空自动取第一个",
+    "adb_path": "adb 可执行文件路径，留 null 表示从 PATH 自动查找",
+    "frida_hidden": "对 frida-server 改名隐藏的配置（name=改名后的进程名，port=监听端口）",
+    "frida_last_hook": "上次使用的 Frida hook 目标记录，便于快速复用（pkg=包名，cls=类名，m=方法名）"
+  },
+  "serial": "127.0.0.1:5555",
+  "adb_path": null,
+  "frida_hidden": {
+    "name": "frida-server",
+    "port": 27042
+  },
+  "frida_last_hook": {
+    "pkg": "com.your.game.package",
+    "cls": "ExampleClass",
+    "m": "exampleMethod"
+  }
+}
